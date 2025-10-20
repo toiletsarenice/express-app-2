@@ -15,7 +15,7 @@ const options = {
 app.use('/', express.static("static"))
 
 app.use("/", (req, res) => {
-    return res.sendFile('index.html', options)
+    return res.sendFile('../index.html', options)
 })
 
 module.exports = app;
