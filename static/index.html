@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>mental sums</title>
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#7dd3fc;--muted:#94a3b8}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#071130 0%, #071b2a 100%);color:#e6eef8}
+    .card{width:720px;max-width:95%;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:28px;box-shadow:0 10px 30px rgba(2,6,23,0.7)}
+    h1{margin:0 0 6px 0;font-size:28px}
+    .meta{color:var(--muted);margin-bottom:18px}
+    .top-row{display:flex;gap:12px;align-items:center;margin-bottom:18px}
+    .timer{font-weight:700;font-size:22px;padding:8px 12px;border-radius:8px;background:rgba(125,211,252,0.06);color:var(--accent)}
+    .controls input[type=number]{width:100px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .question{font-size:32px;margin:18px 0;padding:18px;border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:space-between}
+    .answer-row{display:flex;gap:12px}
+    input.answer{padding:12px 16px;font-size:18px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;width:320px}
+    button{padding:10px 14px;border-radius:10px;border:0;background:var(--accent);color:#012029;font-weight:700;cursor:pointer}
+    button:disabled{opacity:0.5;cursor:not-allowed}
+    .stats{margin-top:14px;color:var(--muted);display:flex;gap:18px}
+    .feedback{height:20px;margin-top:10px;color:#ffd6d6}
+    .footer{margin-top:14px;font-size:13px;color:var(--muted)}
+    @media (max-width:520px){.answer{width:160px}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>mental sums</h1>
+    <div class="meta">Multiply two random numbers (1 → 1,000,000). Enter the exact product. Generate new questions only when you answer correctly. Timer stops the run.</div>
+
+    <div class="top-row">
+      <div class="timer" id="timer">00:60</div>
+      <div class="controls">
+        <label>Duration (sec): <input id="duration" type="number" min="5" value="60"></label>
+        <button id="startBtn">Start</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="question" id="question">Press <strong>Start</strong> to begin</div>
+
+    <div class="answer-row">
+      <input id="answer" class="answer" placeholder="Type product here" inputmode="numeric" autocomplete="off" disabled>
+      <button id="submitBtn" disabled>Submit</button>
+      <button id="skipBtn" disabled title="Skip this question (no score)">Skip</button>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+    <div class="stats">
+      <div>Score: <strong id="score">0</strong></div>
+      <div>Attempts: <strong id="attempts">0</strong></div>
+      <div>Correct: <strong id="correct">0</strong></div>
+      <div>Accuracy: <strong id="accuracy">0%</strong></div>
+    </div>
+
+    <div class="footer">Tip: press Enter to submit. Only correct answers produce the next question. You can change the duration before starting.</div>
+  </div>
+
+  <script>
+    // Utility: generate random integer between 1 and 1_000_000 (inclusive)
+    function randInt() {
+      // Math.random range [0,1). Multiply by 1_000_000, floor and +1
+      return BigInt(Math.floor(Math.random() * 1_000_000) + 1);
+    }
+
+    const timerEl = document.getElementById('timer');
+    const questionEl = document.getElementById('question');
+    const answerInput = document.getElementById('answer');
+    const submitBtn = document.getElementById('submitBtn');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const durationInput = document.getElementById('duration');
+    const feedbackEl = document.getElementById('feedback');
+
+    let leftMs = 0;
+    let timerId = null;
+    let currentA = null;
+    let currentB = null;
+    let product = null;
+
+    let score = 0, attempts = 0, correct = 0;
+
+    function formatTime(ms) {
+      const sec = Math.ceil(ms / 1000);
+      const mm = Math.floor(sec / 60).toString().padStart(2,'0');
+      const ss = (sec % 60).toString().padStart(2,'0');
+      return `${mm}:${ss}`;
+    }
+
+    function updateStats() {
+      document.getElementById('score').textContent = score;
+      document.getElementById('attempts').textContent = attempts;
+      document.getElementById('correct').textContent = correct;
+      const acc = attempts === 0 ? 0 : Math.round((correct/attempts)*100);
+      document.getElementById('accuracy').textContent = acc + '%';
+    }
+
+    function newQuestion() {
+      currentA = randInt();
+      currentB = randInt();
+      product = currentA * currentB; // BigInt
+      questionEl.innerHTML = `<div>${currentA.toString()} × ${currentB.toString()}</div><div style="font-size:14px;color:var(--muted)">Answer exactly (integers only)</div>`;
+      answerInput.value = '';
+      answerInput.focus();
+      feedbackEl.textContent = '';
+    }
+
+    function endRun() {
+      clearInterval(timerId); timerId = null;
+      answerInput.disabled = true; submitBtn.disabled = true; skipBtn.disabled = true; startBtn.disabled = false;
+      feedbackEl.style.color = '#ffd6d6';
+      feedbackEl.textContent = `Time's up — final score: ${score} (Correct: ${correct}, Attempts: ${attempts})`;
+    }
+
+    function tick() {
+      leftMs -= 250;
+      if (leftMs <= 0) {
+        timerEl.textContent = '00:00';
+        endRun();
+        return;
+      }
+      timerEl.textContent = formatTime(leftMs);
+    }
+
+    startBtn.addEventListener('click', ()=>{
+      const seconds = Number(durationInput.value) || 60;
+      leftMs = seconds * 1000;
+      timerEl.textContent = formatTime(leftMs);
+      // reset stats
+      score = 0; attempts = 0; correct = 0; updateStats();
+      answerInput.disabled = false; submitBtn.disabled = false; skipBtn.disabled = false; startBtn.disabled = true;
+
+      newQuestion();
+      // start timer
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(tick, 250);
+    });
+
+    resetBtn.addEventListener('click', ()=>{
+      if (timerId) clearInterval(timerId);
+      timerId = null;
+      timerEl.textContent = '00:60';
+      questionEl.textContent = 'Press Start to begin';
+      answerInput.value = '';
+      answerInput.disabled = true; submitBtn.disabled = true; skipBtn.disabled = true; startBtn.disabled = false;
+      feedbackEl.textContent = '';
+      score = 0; attempts = 0; correct = 0; updateStats();
+    });
+
+    submitBtn.addEventListener('click', ()=>{
+      if (!product || leftMs <= 0) return;
+      const val = answerInput.value.trim();
+      if (val === '') return;
+      attempts++;
+      try {
+        // Accept large integers using BigInt. Also allow leading + or -? We'll treat negatives as wrong.
+        const user = BigInt(val);
+        if (user === product) {
+          score += 10; // arbitrary scoring per correct
+          correct++;
+          feedbackEl.style.color = '#b7ffd4';
+          feedbackEl.textContent = 'Correct — next question!';
+          updateStats();
+          // small delay so user sees feedback, but only if time remains
+          setTimeout(()=>{ if (leftMs>0) newQuestion(); }, 250);
+        } else {
+          feedbackEl.style.color = '#ffd6d6';
+          feedbackEl.textContent = 'Incorrect — try again';
+          updateStats();
+          answerInput.focus();
+        }
+      } catch (e) {
+        feedbackEl.style.color = '#ffd6d6';
+        feedbackEl.textContent = 'Invalid input — enter an integer (no commas)';
+      }
+    });
+
+    // pressing Enter in the input submits
+    answerInput.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') { e.preventDefault(); submitBtn.click(); }
+    });
+
+    // allow skipping question without penalty (per user didn't ask, but handy)
+    skipBtn.addEventListener('click', ()=>{
+      if (leftMs <= 0) return;
+      feedbackEl.style.color = 'var(--muted)';
+      feedbackEl.textContent = 'Skipped — new question generated';
+      setTimeout(()=>{ if (leftMs>0) newQuestion(); }, 150);
+    });
+
+    // initialize
+    timerEl.textContent = '00:60';
+    answerInput.disabled = true; submitBtn.disabled = true; skipBtn.disabled = true;
+  </script>
+</body>
+</html>
