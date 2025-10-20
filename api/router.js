@@ -9,7 +9,7 @@ const options = {
 router.use('/', express.static("static"))
 
 router.get("/", (req, res) => {
-    return res.sendFile('index.html', options)
+    return res.sendFile('../index.html', options)
 })
 
 module.exports = router
